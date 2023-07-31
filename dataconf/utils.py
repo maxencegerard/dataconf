@@ -58,6 +58,9 @@ def __parse(value: any, clazz: Type, path: str, strict: bool, ignore_unexpected:
         renamings = dict()
 
         for f in fields(clazz):
+            # If field is set to init = False, do nothing, because no need to pass it as an argument in constructor
+            if not f.init:
+                continue
             if f.name in value:
                 val = value[f.name]
             elif f.name.replace("_", "-") in value:
