@@ -1,18 +1,28 @@
-from dataclasses import _MISSING_TYPE
-from dataclasses import asdict
-from dataclasses import fields
-from dataclasses import is_dataclass
+from dataclasses import (
+    _MISSING_TYPE,
+    asdict,
+    fields,
+    is_dataclass)
 from datetime import datetime
-from enum import Enum
-from enum import IntEnum
+from enum import (
+    Enum,
+    IntEnum)
 from inspect import isclass
-from typing import Any
-from typing import Dict
-from typing import get_args
-from typing import get_origin
-from typing import List
-from typing import Type
-from typing import Union
+from typing import (
+    Any,
+    Dict,
+    get_args,
+    get_origin,
+    List,
+    Type,
+    Union)
+
+from dateutil.parser import isoparse
+from dateutil.relativedelta import relativedelta
+from pyhocon import ConfigFactory
+from pyhocon.config_tree import ConfigList
+from pyhocon.config_tree import ConfigTree
+import pyparsing
 
 from dataconf.exceptions import AmbiguousSubclassException
 from dataconf.exceptions import EnvListOrderException
@@ -21,12 +31,6 @@ from dataconf.exceptions import MissingTypeException
 from dataconf.exceptions import ParseException
 from dataconf.exceptions import TypeConfigException
 from dataconf.exceptions import UnexpectedKeysException
-from dateutil.parser import isoparse
-from dateutil.relativedelta import relativedelta
-from pyhocon import ConfigFactory
-from pyhocon.config_tree import ConfigList
-from pyhocon.config_tree import ConfigTree
-import pyparsing
 
 
 NoneType = type(None)
@@ -58,9 +62,11 @@ def __parse(value: any, clazz: Type, path: str, strict: bool, ignore_unexpected:
         renamings = dict()
 
         for f in fields(clazz):
-            # If field is set to init = False, do nothing, because no need to pass it as an argument in constructor
+            # If field is set to init = False, do nothing
+            # because no need to pass it as an argument in constructor.
             if not f.init:
                 continue
+
             if f.name in value:
                 val = value[f.name]
             elif f.name.replace("_", "-") in value:
@@ -79,11 +85,9 @@ def __parse(value: any, clazz: Type, path: str, strict: bool, ignore_unexpected:
                 fs[f.name] = __parse(
                     val, f.type, f"{path}.{f.name}", strict, ignore_unexpected
                 )
-
             elif is_optional(f.type):
                 # Optional not found
                 fs[f.name] = None
-
             else:
                 raise MalformedConfigException(
                     f"expected type {clazz} at {path}, no {f.name} found in dataclass"
@@ -207,44 +211,6 @@ def __parse(value: any, clazz: Type, path: str, strict: bool, ignore_unexpected:
 
     if clazz is relativedelta:
         return __parse_type(value, clazz, path, isinstance(value, relativedelta))
-
-    child_failures = []
-    child_successes = []
-    subtype = value.pop("_type", default=None)
-    for child_clazz in sorted(clazz.__subclasses__(), key=lambda c: c.__name__):
-        if is_dataclass(child_clazz) and (
-            subtype is None
-            or f"{child_clazz.__module__}.{child_clazz.__name__}".endswith(subtype)
-        ):
-            try:
-                child_successes.append(
-                    (
-                        child_clazz,
-                        __parse(value, child_clazz, path, strict, ignore_unexpected),
-                    )
-                )
-            except (
-                TypeConfigException,
-                MalformedConfigException,
-                UnexpectedKeysException,
-                AmbiguousSubclassException,
-            ) as e:
-                child_failures.append(e)
-
-    if len(child_successes) == 1:
-        return child_successes[0][1]
-    elif len(child_successes) > 1:
-        matching_classes = "\n- ".join(map(lambda x: x[0].__name__, child_successes))
-        raise AmbiguousSubclassException(
-            f"""multiple subtypes of {clazz} matched at {path}, use '_type' to disambiguate:\n- {matching_classes}"""
-        )
-
-    # no need to check length; false if empty
-    if child_failures:
-        failures = "\n- ".join([str(c) for c in child_failures])
-        raise TypeConfigException(
-            f"expected type {clazz} at {path}, failed subclasses:\n- {failures}"
-        )
 
     raise TypeConfigException(f"expected type {clazz} at {path}, got {type(value)}")
 
